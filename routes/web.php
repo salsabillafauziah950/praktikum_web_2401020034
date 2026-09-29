@@ -1,7 +1,15 @@
 <?php
 
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Validator;
 
+// ===== Route Pertemuan 1 =====
+Route::get('/', function () {
+    return view('welcome');
+});
+
+// ===== Route Pertemuan 2 =====
 Route::get('/', function () {
     return view('welcome');
 });
@@ -13,7 +21,7 @@ Route::get('/', function () {
 
 Route::get('/latihan-php', function () {
     $nama = 'Fauziah Salsabillah';
-    $nilai = [68, 65, 60, 55, 50]; 
+    $nilai = [80, 85, 70, 65, 81]; 
 
     $hitungRataRata = function (array $data): float {
         $total = 0;
@@ -34,4 +42,50 @@ Route::get('/latihan-php', function () {
     return view('latihan-php', compact(
         'nama', 'nilai', 'rataRata', 'status'
     ));
+});
+
+// ===== Route Pertemuan 3 =====
+Route::get('/form-mahasiswa', function () {
+    return view('form-mahasiswa');
+});
+
+Route::post('/form-mahasiswa', function (Request $request) {
+    $dataBersih = [
+        'nama'  => strip_tags(trim((string) $request->input('nama'))),
+        'email' => filter_var(
+            (string) $request->input('email'),
+            FILTER_SANITIZE_EMAIL
+        ),
+        'usia'  => trim((string) $request->input('usia')),
+        'nim'   => trim((string) $request->input('nim')),
+    ];
+
+    $validator = Validator::make($dataBersih, [
+        'nama'  => ['required', 'min:3', 'max:50'],
+        'email' => ['required', 'email'],
+        'usia'  => ['required', 'integer', 'min:17', 'max:60'],
+        'nim'   => ['required', 'digits_between:8,12'],
+    ], [
+        'nama.required'      => 'Nama wajib diisi.',
+        'nama.min'           => 'Nama minimal 3 karakter.',
+        'email.required'     => 'Email wajib diisi.',
+        'email.email'        => 'Format email tidak valid.',
+        'usia.required'      => 'Usia wajib diisi.',
+        'usia.integer'       => 'Usia harus berupa angka.',
+        'usia.min'           => 'Usia minimal 17 tahun.',
+        'usia.max'           => 'Usia maksimal 60 tahun.',
+        'nim.required'       => 'NIM wajib diisi.',
+        'nim.digits_between' => 'NIM harus berupa angka 8-12 digit.',
+    ]);
+
+    if ($validator->fails()) {
+        return redirect('/form-mahasiswa')
+            ->withErrors($validator)
+            ->withInput();
+    }
+
+    $data = $validator->validated();
+    $data['usia'] = (int) $data['usia'];
+
+    return view('hasil-form', ['data' => $data]);
 });
