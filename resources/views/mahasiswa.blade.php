@@ -2,48 +2,94 @@
 <html lang="id">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Data Mahasiswa</title>
 </head>
-<body>
-
+</body>
     <h1>Data Mahasiswa</h1>
 
-    @if ($nim)
-        <p>Filter NIM: <strong>{{ $nim }}</strong></p>
+    @if (session('berhasil'))
+        <p>{{ session('berhasil') }}</p>
     @endif
 
-    @if ($daftarMahasiswa)
-        <table border="1" cellpadding="8" cellspacing="0">
-            <thead>
-                <tr>
-                    <th>NIM</th>
-                    <th>Nama</th>
-                    <th>Email</th>
-                    <th>Usia</th>
-                    <th>Program Studi</th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach ($daftarMahasiswa as $mahasiswa)
-                    <tr>
-                        <td>{{ $mahasiswa['nim'] }}</td>
-                        <td>{{ $mahasiswa['nama'] }}</td>
-                        <td>{{ $mahasiswa['email'] }}</td>
-                        <td>{{ $mahasiswa['usia'] }}</td>
-                        <td>{{ $mahasiswa['nama_prodi'] }}</td>
-                    </tr>
-                @endforeach
-            </tbody>
-        </table>
-    @else
-        <p>Data tidak ditemukan.</p>
+    @if (session('gagal'))
+        <p>{{ session('gagal') }}</p>
     @endif
 
-    @if ($nim)
+    @if ($errors->any())
+        <ul>
+            @foreach ($errors->all() as $error)
+                <li>{{ $error }}</li>
+            @endforeach
+        </ul>
+    @endif
+
+    <h2>Tambah Mahasiswa</h2>
+
+    <form action="{{ route('mahasiswa.store') }}" method="POST">
+        @csrf
+
         <p>
-            <a href="{{ url('/mahasiswa') }}">Tampilkan semua data</a>
+            NIM<br>
+            <input type="text" name="nim" value="{{ old('nim') }}">
         </p>
-    @endif
 
+        <p>
+            Nama<br>
+            <input type="text" name="nama" value="{{ old('nama') }}">
+        </p>
+
+        <p>
+            Email<br>
+            <input type="email" name="email" value="{{ old('email') }}">
+        </p>
+
+        <p>
+            Usia<br>
+            <input type="number" name="usia" value="{{ old('usia') }}">
+        </p>
+
+       
+        <p>
+            Program Studi<br>
+            <select name="program_studi_id">
+                <option value="">-- Pilih Program Studi --</option>
+
+                @foreach ($daftarProgramStudi as $programStudi)
+                    <option value="{{ $programStudi['id'] }}">
+                        {{ $programStudi['nama_prodi'] }}
+                    </option>
+                @endforeach
+            </select>
+        </p>
+
+        <button type="submit">Tambah Data</button>
+    </form>
+
+    <h2>Daftar Mahasiswa</h2>
+
+    <table border="1" cellpadding="6" cellspacing="0">
+        <tr>
+            <th>NIM</th>
+            <th>Nama</th>
+            <th>Email</th>
+            <th>Usia</th>
+            <th>Program Studi</th>
+        </tr>
+
+        @forelse ($daftarMahasiswa as $mahasiswa)
+            <tr>
+                <td>{{ $mahasiswa['nim'] }}</td>
+                <td>{{ $mahasiswa['nama'] }}</td>
+                <td>{{ $mahasiswa['email'] }}</td>
+                <td>{{ $mahasiswa['usia'] }}</td>
+                <td>{{ $mahasiswa['nama_prodi'] }}</td>
+            </tr>
+        @empty
+            <tr>
+                <td colspan="5">Data belum tersedia.</td>
+            </tr>
+        @endforelse
+    </table>
 </body>
 </html>
