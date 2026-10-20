@@ -3,112 +3,74 @@
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
-use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Validator;
 
-// ===== Route Pertemuan 1 =====
+// ==========================================
+// Route Halaman Utama
+// ==========================================
 
 Route::get('/', function () {
     return view('welcome');
 });
 
-// ===== Route Pertemuan 2 =====
-
 Route::get('/latihan-php', function () {
-    $nama = 'Siti Umayah';
-
-    $nilai = [80, 75, 90, 65, 88];
-
-    $hitungRataRata = function (array $data): float {
-        $total = 0;
-
-        foreach ($data as $angka) {
-            $total += $angka;
-        }
-
-        return $total / count($data);
-    };
-
-    $rataRata = $hitungRataRata($nilai);
-
-    if ($rataRata >= 75) {
-        $status = 'Lulus';
-    } else {
-        $status = 'Perlu Perbaikan';
-    }
-
-    return view('latihan-php', compact(
-        'nama',
-        'nilai',
-        'rataRata',
-        'status'
-    ));
+    return view('latihan-php');
 });
 
-// ===== Route Pertemuan 3 =====
+// ==========================================
+// Route Form Mahasiswa (Praktikum Sebelumnya)
+// ==========================================
 
 Route::get('/form-mahasiswa', function () {
     return view('form-mahasiswa');
 });
 
 Route::post('/form-mahasiswa', function (Request $request) {
-
-    $dataBersih = [
-        'nama' => strip_tags(trim((string) $request->input('nama'))),
-        'email' => filter_var(
-            (string) $request->input('email'),
-            FILTER_SANITIZE_EMAIL
-        ),
-        'usia' => trim((string) $request->input('usia')),
-        'nim' => trim((string) $request->input('nim')),
-    ];
-
-    $validator = Validator::make($dataBersih, [
-        'nama' => ['required', 'min:3', 'max:50'],
-        'email' => ['required', 'email'],
-        'usia' => ['required', 'integer', 'min:17', 'max:60'],
-        'nim' => ['required', 'digits_between:8,12'],
-    ], [
-        'nama.required' => 'Nama wajib diisi.',
-        'nama.min' => 'Nama minimal 3 karakter.',
-        'email.required' => 'Email wajib diisi.',
-        'email.email' => 'Format email tidak valid.',
-        'usia.required' => 'Usia wajib diisi.',
-        'usia.integer' => 'Usia harus berupa angka.',
-        'usia.min' => 'Usia minimal 17 tahun.',
-        'usia.max' => 'Usia maksimal 60 tahun.',
-        'nim.required' => 'NIM wajib diisi.',
-        'nim.digits_between' => 'NIM harus berupa angka 8-12 digit.',
-    ]);
-
-    if ($validator->fails()) {
-        return redirect('/form-mahasiswa')
-            ->withErrors($validator)
-            ->withInput();
-    }
-
-    $data = $validator->validated();
-    $data['usia'] = (int) $data['usia'];
-
-    return view('hasil-form', ['data' => $data]);
+    return back()->with('berhasil', 'Form berhasil dikirim.');
 });
 
-// ===== Route Pertemuan 6: Read =====
+// ==========================================
+// Route Pertemuan 6: Read, Search, dan Filter
+// ==========================================
 
-Route::get('/mahasiswa', function () {
+Route::get('/mahasiswa', function (Request $request) {
     try {
         $pdo = DB::connection()->getPdo();
 
-        $pernyataanMahasiswa = $pdo->prepare(
-            'SELECT m.nim, m.nama, m.email, m.usia,
-                    p.nama_prodi
-             FROM mahasiswa AS m
-             JOIN program_studi AS p
-                ON p.id = m.program_studi_id
-             ORDER BY m.nim'
-        );
+        $q = trim((string) $request->query('q', ''));
+        $programStudiId = $request->query('program_studi_id');
 
-        $pernyataanMahasiswa->execute();
+        $sql = 'SELECT m.id, m.nim, m.nama, m.email, m.usia,
+                       m.program_studi_id, p.nama_prodi
+                FROM mahasiswa AS m
+                JOIN program_studi AS p
+                    ON p.id = m.program_studi_id
+                WHERE 1 = 1';
+
+        $parameter = [];
+
+        if ($q !== '') {
+            $sql .= ' AND (
+                m.nim LIKE :nim
+                OR m.nama LIKE :nama
+                OR m.email LIKE :email
+            )';
+
+            $parameter['nim'] = "%{$q}%";
+            $parameter['nama'] = "%{$q}%";
+            $parameter['email'] = "%{$q}%";
+        }
+
+        if ($programStudiId !== null && $programStudiId !== '') {
+            $sql .= ' AND m.program_studi_id = :program_studi_id';
+            $parameter['program_studi_id'] = $programStudiId;
+        }
+
+        $sql .= ' ORDER BY m.nim';
+
+        $pernyataanMahasiswa = $pdo->prepare($sql);
+        $pernyataanMahasiswa->execute($parameter);
 
         $daftarMahasiswa = $pernyataanMahasiswa->fetchAll(
             \PDO::FETCH_ASSOC
@@ -128,82 +90,233 @@ Route::get('/mahasiswa', function () {
 
         return view('mahasiswa', compact(
             'daftarMahasiswa',
-            'daftarProgramStudi'
+            'daftarProgramStudi',
+            'q',
+            'programStudiId'
         ));
-    } catch (\Throwable $error) {
-        report($error);
 
-        return response(
-            'Data tidak dapat dibaca. Periksa koneksi dan query.',
-            500
+    } catch (\Throwable $e) {
+        report($e);
+
+        return back()->with(
+            'gagal',
+            'Gagal mengambil data mahasiswa.'
         );
     }
 })->name('mahasiswa.index');
 
-// ===== Route Pertemuan 6: Create =====
+// ==========================================
+// Route Pertemuan 6: Create
+// ==========================================
 
 Route::post('/mahasiswa', function (Request $request) {
-
     $data = $request->validate([
-        'nim' => ['required', 'string', 'max:20'],
-        'nama' => ['required', 'string', 'max:100'],
-        'email' => ['required', 'email', 'max:100'],
-        'usia' => ['required', 'integer', 'min:15', 'max:100'],
-        'program_studi_id' => ['required', 'integer'],
-    ], [
-        'nim.required' => 'NIM wajib diisi.',
-        'nama.required' => 'Nama wajib diisi.',
-        'email.required' => 'Email wajib diisi.',
-        'email.email' => 'Format email tidak valid.',
-        'usia.required' => 'Usia wajib diisi.',
-        'usia.integer' => 'Usia harus berupa angka.',
-        'program_studi_id.required' => 'Program studi wajib dipilih.',
+        'nim' => 'required|string|max:10',
+        'nama' => 'required|string|max:100',
+        'email' => 'required|email|max:100',
+        'usia' => 'required|integer|min:1|max:255',
+        'program_studi_id' => 'required|integer',
     ]);
 
     try {
         $pdo = DB::connection()->getPdo();
 
-        $cekDuplikat = $pdo->prepare(
-            'SELECT COUNT(*) FROM mahasiswa
+        $cek = $pdo->prepare(
+            'SELECT COUNT(*)
+             FROM mahasiswa
              WHERE nim = :nim OR email = :email'
         );
 
-        $cekDuplikat->execute([
+        $cek->execute([
             'nim' => $data['nim'],
             'email' => $data['email'],
         ]);
 
-        if ((int) $cekDuplikat->fetchColumn() > 0) {
+        if ($cek->fetchColumn() > 0) {
             return back()->withInput()->with(
                 'gagal',
-                'NIM atau email sudah digunakan.'
+                'NIM atau email sudah terdaftar.'
             );
         }
 
-        $simpan = $pdo->prepare(
-            'INSERT INTO mahasiswa
-             (nim, nama, email, usia, program_studi_id)
-             VALUES (:nim, :nama, :email, :usia, :program_studi_id)'
+        $cekProdi = $pdo->prepare(
+            'SELECT COUNT(*) FROM program_studi WHERE id = :id'
         );
 
-        $simpan->execute([
-            'nim' => $data['nim'],
-            'nama' => $data['nama'],
-            'email' => $data['email'],
-            'usia' => $data['usia'],
-            'program_studi_id' => $data['program_studi_id'],
+        $cekProdi->execute([
+            'id' => $data['program_studi_id'],
         ]);
 
-        return redirect()->route('mahasiswa.index')->with(
-            'berhasil',
-            'Data mahasiswa berhasil ditambahkan.'
+        if ($cekProdi->fetchColumn() == 0) {
+            return back()->withInput()->with(
+                'gagal',
+                'Program studi tidak ditemukan.'
+            );
+        }
+
+        $insert = $pdo->prepare(
+            'INSERT INTO mahasiswa
+                (nim, nama, email, usia, program_studi_id,
+                 created_at, updated_at)
+             VALUES
+                (:nim, :nama, :email, :usia, :program_studi_id,
+                 NOW(), NOW())'
         );
-    } catch (\Throwable $error) {
-        report($error);
+
+        $insert->execute($data);
+
+        return redirect()->route('mahasiswa.index')
+            ->with('berhasil', 'Data mahasiswa berhasil ditambahkan.');
+
+    } catch (\Throwable $e) {
+        report($e);
 
         return back()->withInput()->with(
             'gagal',
-            'Data gagal disimpan. Periksa koneksi dan data.'
+            'Data mahasiswa gagal ditambahkan.'
         );
     }
 })->name('mahasiswa.store');
+
+// ==========================================
+// Route Pertemuan 6: Edit
+// ==========================================
+
+Route::get('/mahasiswa/{id}/edit', function ($id) {
+    try {
+        $pdo = DB::connection()->getPdo();
+
+        $pernyataan = $pdo->prepare(
+            'SELECT id, nim, nama, email, usia, program_studi_id
+             FROM mahasiswa
+             WHERE id = :id'
+        );
+
+        $pernyataan->execute(['id' => $id]);
+
+        $mahasiswa = $pernyataan->fetch(\PDO::FETCH_ASSOC);
+
+        if (!$mahasiswa) {
+            return redirect()->route('mahasiswa.index')
+                ->with('gagal', 'Data mahasiswa tidak ditemukan.');
+        }
+
+        $pernyataanProdi = $pdo->prepare(
+            'SELECT id, nama_prodi
+             FROM program_studi
+             ORDER BY nama_prodi'
+        );
+
+        $pernyataanProdi->execute();
+
+        $daftarProgramStudi = $pernyataanProdi->fetchAll(
+            \PDO::FETCH_ASSOC
+        );
+
+        return view('mahasiswa-edit', compact(
+            'mahasiswa',
+            'daftarProgramStudi'
+        ));
+
+   } catch (\Throwable $e) {
+    report($e);
+
+    return response(
+        'Error: ' . $e->getMessage(),
+        500
+    );
+}
+})->name('mahasiswa.edit');
+
+// ==========================================
+// Route Pertemuan 6: Update
+// ==========================================
+
+Route::put('/mahasiswa/{id}', function (Request $request, $id) {
+    $data = $request->validate([
+        'nim' => 'required|string|max:10',
+        'nama' => 'required|string|max:100',
+        'email' => 'required|email|max:100',
+        'usia' => 'required|integer|min:1|max:255',
+        'program_studi_id' => 'required|integer',
+    ]);
+
+    try {
+        $pdo = DB::connection()->getPdo();
+
+        $cek = $pdo->prepare(
+            'SELECT COUNT(*)
+             FROM mahasiswa
+             WHERE (nim = :nim OR email = :email)
+             AND id <> :id'
+        );
+
+        $cek->execute([
+            'nim' => $data['nim'],
+            'email' => $data['email'],
+            'id' => $id,
+        ]);
+
+        if ($cek->fetchColumn() > 0) {
+            return back()->withInput()->with(
+                'gagal',
+                'NIM atau email sudah digunakan mahasiswa lain.'
+            );
+        }
+
+        $update = $pdo->prepare(
+            'UPDATE mahasiswa
+             SET nim = :nim,
+                 nama = :nama,
+                 email = :email,
+                 usia = :usia,
+                 program_studi_id = :program_studi_id,
+                 updated_at = NOW()
+             WHERE id = :id'
+        );
+
+        $data['id'] = $id;
+        $update->execute($data);
+
+        return redirect()->route('mahasiswa.index')
+            ->with('berhasil', 'Data mahasiswa berhasil diperbarui.');
+
+    } catch (\Throwable $e) {
+        report($e);
+
+        return back()->withInput()->with(
+            'gagal',
+            'Data mahasiswa gagal diperbarui.'
+        );
+    }
+})->name('mahasiswa.update');
+
+// ==========================================
+// Route Pertemuan 6: Delete
+// ==========================================
+
+Route::delete('/mahasiswa/{id}', function ($id) {
+    try {
+        $pdo = DB::connection()->getPdo();
+
+        $hapus = $pdo->prepare(
+            'DELETE FROM mahasiswa WHERE id = :id'
+        );
+
+        $hapus->execute(['id' => $id]);
+
+        if ($hapus->rowCount() === 0) {
+            return redirect()->route('mahasiswa.index')
+                ->with('gagal', 'Data mahasiswa tidak ditemukan.');
+        }
+
+        return redirect()->route('mahasiswa.index')
+            ->with('berhasil', 'Data mahasiswa berhasil dihapus.');
+
+    } catch (\Throwable $e) {
+        report($e);
+
+        return redirect()->route('mahasiswa.index')
+            ->with('gagal', 'Data mahasiswa gagal dihapus.');
+    }
+})->name('mahasiswa.destroy');
